@@ -1,0 +1,23 @@
+name: CMake on Ubuntu
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Clang
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: latest
+          platform: x64
+
+      - name: Install zlib
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: zlib1g-dev
+          version: 1.0
+
+      - uses: actions/checkout@v2
+
+      - run: cmake --workflow --preset ci
