@@ -1,3 +1,5 @@
+# -*- mode:org; mode:visual-line; coding:utf-8; -*-
+
 CHANGES:
   - Transformed header lib 2 (EXPERIMENTAL) C++ 20 module
 
