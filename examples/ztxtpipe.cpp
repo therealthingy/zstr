@@ -1,9 +1,8 @@
+#include "zstr.hpp"
 #include <iostream>
 #include <string>
-#include "zstr.hpp"
 
-int main()
-{
+int main() {
     //
     // Create zstr::istream feeding off std::cin.
     //
@@ -12,8 +11,7 @@ int main()
     // Main loop
     //
     std::string s;
-    while (getline(is, s))
-    {
+    while (getline(is, s)) {
         std::cout << s << std::endl;
     }
 }
