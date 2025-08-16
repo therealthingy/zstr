@@ -516,7 +516,9 @@ class istream : public std::istream {
         : std::istream(new istreambuf(is.rdbuf(), _buff_size, _auto_detect, _window_bits)) {
         exceptions(std::ios_base::badbit);
     }
-    explicit istream(std::streambuf *sbuf_p) : std::istream(new istreambuf(sbuf_p)) {
+    explicit istream(std::streambuf *sbuf_p, std::size_t _buff_size = default_buff_size, bool _auto_detect = true,
+                     int _window_bits = 0)
+        : std::istream(new istreambuf(sbuf_p, _buff_size, _auto_detect, _window_bits)) {
         exceptions(std::ios_base::badbit);
     }
     virtual ~istream() {
@@ -531,7 +533,9 @@ class ostream : public std::ostream {
         : std::ostream(new ostreambuf(os.rdbuf(), _buff_size, _level, _window_bits)) {
         exceptions(std::ios_base::badbit);
     }
-    explicit ostream(std::streambuf *sbuf_p) : std::ostream(new ostreambuf(sbuf_p)) {
+    explicit ostream(std::streambuf *sbuf_p, std::size_t _buff_size = default_buff_size,
+                     int _level = Z_DEFAULT_COMPRESSION, int _window_bits = 0)
+        : std::ostream(new ostreambuf(sbuf_p, _buff_size, _level, _window_bits)) {
         exceptions(std::ios_base::badbit);
     }
     virtual ~ostream() {
