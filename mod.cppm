@@ -102,6 +102,7 @@ std::string strerror() {
 class Exception : public std::exception {
   public:
     Exception(const std::string &msg) : _msg(msg) {}
+
     const char *what() const noexcept {
         return _msg.c_str();
     }
@@ -111,7 +112,6 @@ class Exception : public std::exception {
 };    // class Exception
 
 namespace detail {
-
 struct static_method_holder {
     static std::string mode_to_string(std::ios_base::openmode mode) {
         static const int n_modes = 6;
@@ -131,6 +131,7 @@ struct static_method_holder {
             res = "none";
         return res;
     }
+
     static void check_mode(const std::string &filename, std::ios_base::openmode mode) {
         if ((mode & std::ios_base::trunc) && !(mode & std::ios_base::out)) {
             throw Exception(std::string("strict_fstream: open('") + filename + "'): mode error: trunc and not out");
@@ -140,12 +141,14 @@ struct static_method_holder {
             throw Exception(std::string("strict_fstream: open('") + filename + "'): mode error: trunc and app");
         }
     }
+
     static void check_open(std::ios *s_p, const std::string &filename, std::ios_base::openmode mode) {
         if (s_p->fail()) {
             throw Exception(std::string("strict_fstream: open('") + filename + "'," + mode_to_string(mode) +
                             "): open failed: " + strerror());
         }
     }
+
     static void check_peek(std::istream *is_p, const std::string &filename, std::ios_base::openmode mode) {
         bool peek_failed = true;
         try {
@@ -159,15 +162,16 @@ struct static_method_holder {
         is_p->clear();
     }
 };    // struct static_method_holder
-
 }    // namespace detail
 
 class ifstream : public std::ifstream {
   public:
     ifstream() = default;
+
     ifstream(const std::string &filename, std::ios_base::openmode mode = std::ios_base::in) {
         open(filename, mode);
     }
+
     void open(const std::string &filename, std::ios_base::openmode mode = std::ios_base::in) {
         mode |= std::ios_base::in;
         exceptions(std::ios_base::badbit);
@@ -181,9 +185,11 @@ class ifstream : public std::ifstream {
 class ofstream : public std::ofstream {
   public:
     ofstream() = default;
+
     ofstream(const std::string &filename, std::ios_base::openmode mode = std::ios_base::out) {
         open(filename, mode);
     }
+
     void open(const std::string &filename, std::ios_base::openmode mode = std::ios_base::out) {
         mode |= std::ios_base::out;
         exceptions(std::ios_base::badbit);
@@ -196,9 +202,11 @@ class ofstream : public std::ofstream {
 class fstream : public std::fstream {
   public:
     fstream() = default;
+
     fstream(const std::string &filename, std::ios_base::openmode mode = std::ios_base::in) {
         open(filename, mode);
     }
+
     void open(const std::string &filename, std::ios_base::openmode mode = std::ios_base::in) {
         if (!(mode & std::ios_base::out))
             mode |= std::ios_base::in;
@@ -360,6 +368,7 @@ class z_stream_wrapper : public z_stream {
         if (ret != Z_OK)
             throw Exception(this, ret);
     }
+
     ~z_stream_wrapper() {
         if (is_input) {
             inflateEnd(this);
@@ -371,7 +380,6 @@ class z_stream_wrapper : public z_stream {
   private:
     bool is_input;
 };    // class z_stream_wrapper
-
 }    // namespace detail
 
 class istreambuf : public std::streambuf {
@@ -545,7 +553,6 @@ class istreambuf : public std::streambuf {
     bool auto_detect_run;
     bool is_text;
     int window_bits;
-
 };    // class istreambuf
 
 class ostreambuf : public std::streambuf {
@@ -601,6 +608,7 @@ class ostreambuf : public std::streambuf {
                 sync();
             } catch (...) {}
     }
+
     std::streambuf::int_type overflow(std::streambuf::int_type c = traits_type::eof()) override {
         if (!compress) {
             if (!traits_type::eq_int_type(c, traits_type::eof()))
@@ -620,6 +628,7 @@ class ostreambuf : public std::streambuf {
         setp(in_buff.get(), in_buff.get() + buff_size);
         return traits_type::eq_int_type(c, traits_type::eof()) ? traits_type::eof() : sputc(char_type(c));
     }
+
     int sync() override {
         if (!compress)
             return sbuf_p->pubsync();
@@ -645,7 +654,6 @@ class ostreambuf : public std::streambuf {
     std::size_t buff_size;
     bool failed = false;
     bool compress;
-
 };    // class ostreambuf
 
 class istream : public std::istream {
@@ -655,11 +663,13 @@ class istream : public std::istream {
         : std::istream(new istreambuf(is.rdbuf(), _buff_size, _auto_detect, _window_bits)) {
         exceptions(std::ios_base::badbit);
     }
+
     explicit istream(std::streambuf *sbuf_p, std::size_t _buff_size = default_buff_size, bool _auto_detect = true,
                      int _window_bits = 0)
         : std::istream(new istreambuf(sbuf_p, _buff_size, _auto_detect, _window_bits)) {
         exceptions(std::ios_base::badbit);
     }
+
     virtual ~istream() {
         delete rdbuf();
     }
@@ -672,11 +682,13 @@ class ostream : public std::ostream {
         : std::ostream(new ostreambuf(os.rdbuf(), _buff_size, _level, _window_bits)) {
         exceptions(std::ios_base::badbit);
     }
+
     explicit ostream(std::streambuf *sbuf_p, std::size_t _buff_size = default_buff_size,
                      int _level = Z_DEFAULT_COMPRESSION, int _window_bits = 0)
         : std::ostream(new ostreambuf(sbuf_p, _buff_size, _level, _window_bits)) {
         exceptions(std::ios_base::badbit);
     }
+
     virtual ~ostream() {
         delete rdbuf();
     }
@@ -689,9 +701,9 @@ struct strict_fstream_holder {
     strict_fstream_holder(const std::string &filename, std::ios_base::openmode mode = std::ios_base::in)
         : _fs(filename, mode) {}
     strict_fstream_holder() = default;
+
     FStream_Type _fs{};
 };    // class strict_fstream_holder
-
 }    // namespace detail
 
 class ifstream : private detail::strict_fstream_holder<strict_fstream::ifstream>, public std::istream {
@@ -702,20 +714,25 @@ class ifstream : private detail::strict_fstream_holder<strict_fstream::ifstream>
           std::istream(new istreambuf(_fs.rdbuf(), buff_size)) {
         exceptions(std::ios_base::badbit);
     }
+
     explicit ifstream()
         : detail::strict_fstream_holder<strict_fstream::ifstream>(), std::istream(new istreambuf(_fs.rdbuf())) {}
+
     void close() {
         _fs.close();
     }
+
 #ifdef CAN_MOVE_IOSTREAM
     void open(const std::string filename, std::ios_base::openmode mode = std::ios_base::in) {
         _fs.open(filename, mode);
         std::istream::operator=(std::istream(new istreambuf(_fs.rdbuf())));
     }
 #endif
+
     bool is_open() const {
         return _fs.is_open();
     }
+
     virtual ~ifstream() {
         if (_fs.is_open())
             close();
@@ -737,12 +754,15 @@ class ofstream : private detail::strict_fstream_holder<strict_fstream::ofstream>
           std::ostream(new ostreambuf(_fs.rdbuf(), buff_size, level)) {
         exceptions(std::ios_base::badbit);
     }
+
     explicit ofstream()
         : detail::strict_fstream_holder<strict_fstream::ofstream>(), std::ostream(new ostreambuf(_fs.rdbuf())) {}
+
     void close() {
         std::ostream::flush();
         _fs.close();
     }
+
 #ifdef CAN_MOVE_IOSTREAM
     void open(const std::string filename, std::ios_base::openmode mode = std::ios_base::out,
               int level = Z_DEFAULT_COMPRESSION) {
@@ -751,14 +771,17 @@ class ofstream : private detail::strict_fstream_holder<strict_fstream::ofstream>
         rdbuf(new ostreambuf(_fs.rdbuf(), default_buff_size, level));
     }
 #endif
+
     bool is_open() const {
         return _fs.is_open();
     }
+
     ofstream &flush() {
         std::ostream::flush();
         _fs.flush();
         return *this;
     }
+
     virtual ~ofstream() {
         if (_fs.is_open())
             close();
@@ -771,5 +794,4 @@ class ofstream : private detail::strict_fstream_holder<strict_fstream::ofstream>
         return _fs.tellp();
     }
 };    // class ofstream
-
 }    // namespace zstr
