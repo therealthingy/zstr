@@ -4,6 +4,11 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#    include <fcntl.h>    // for _O_BINARY
+#    include <io.h>       // for _setmode
+#endif
+
 void usage(std::ostream &os, const std::string &prog_name) {
     os << "Use: " << prog_name << " [-c] [-o output_file] files..." << std::endl
        << "Synopsis:" << std::endl
@@ -40,8 +45,14 @@ void decompress_files(const std::vector<std::string> &file_v, const std::string 
         //
         // If `f` is a file, create a zstr::ifstream, else (it is stdin) create a zstr::istream wrapper
         //
-        std::unique_ptr<std::istream> is_p = (f != "-" ? std::unique_ptr<std::istream>(new zstr::ifstream(f))
-                                                       : std::unique_ptr<std::istream>(new zstr::istream(std::cin)));
+        std::unique_ptr<std::istream> is_p =
+            (f != "-" ? std::unique_ptr<std::istream>(new zstr::ifstream(f
+#ifdef _WIN32
+                                                                         ,
+                                                                         std::ios::in | std::ios::binary
+#endif
+                                                                         ))
+                      : std::unique_ptr<std::istream>(new zstr::istream(std::cin)));
         //
         // Cat stream
         //
@@ -66,7 +77,12 @@ void compress_files(const std::vector<std::string> &file_v, const std::string &o
         std::unique_ptr<std::ifstream> ifs_p;
         std::istream *is_p = &std::cin;
         if (f != "-") {
-            ifs_p = std::unique_ptr<std::ifstream>(new strict_fstream::ifstream(f));
+            ifs_p = std::unique_ptr<std::ifstream>(new strict_fstream::ifstream(f
+#ifdef _WIN32
+                                                                                ,
+                                                                                std::ios::in | std::ios::binary
+#endif
+                                                                                ));
             is_p = ifs_p.get();
         }
         //
@@ -77,6 +93,11 @@ void compress_files(const std::vector<std::string> &file_v, const std::string &o
 }    // compress_files
 
 int main(int argc, char *argv[]) {
+#ifdef _WIN32
+    // Don't touch line endings
+    _setmode(_fileno(stdin), _O_BINARY);
+    _setmode(_fileno(stdout), _O_BINARY);
+#endif
     bool compress = false;
     std::string output_file;
     int c;

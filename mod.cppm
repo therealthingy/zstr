@@ -268,6 +268,80 @@ class Exception : public std::ios_base::failure {
 
 namespace detail {
 
+namespace WindowBits {
+/*
+ * Definitions for the valid values of the windowBits/windowSize parameter
+ *
+ * Based on the zlib manual (https://zlib.net/manual.html)
+ * See sections DeflateInit2 and InflateInit2
+ */
+
+namespace Raw {
+constexpr int RAW = -8;
+constexpr int RAW1 = -9;
+constexpr int RAW2 = -10;
+constexpr int RAW3 = -11;
+constexpr int RAW4 = -12;
+constexpr int RAW5 = -13;
+constexpr int RAW6 = -14;
+constexpr int RAW7 = -15;
+}    // namespace Raw
+constexpr int RAW = Raw::RAW;
+
+namespace ZLIB {
+constexpr int AUTO = 0;
+constexpr int _256B = 8;
+constexpr int MIN = _256B;
+constexpr int _512B = 9;
+constexpr int _1KiB = 10;
+constexpr int _2KiB = 11;
+constexpr int _4KiB = 12;
+constexpr int _8KiB = 13;
+constexpr int _16KiB = 14;
+constexpr int _32KiB = 15;
+constexpr int MAX = _32KiB;
+}    // namespace ZLIB
+
+// For use with older version: De-/InflateInit()
+constexpr int DEFAULT_DEFLATE = ZLIB::MAX;
+constexpr int DEFAULT_INFLATE = ZLIB::MAX;
+// For use with current version: De-/InflateInit2()
+constexpr int DEFAULT_DEFLATE2 = ZLIB::MIN;
+constexpr int DEFAULT_INFLATE2 = ZLIB::MAX;
+
+constexpr int ADD_TO_ENABLE_GZIP_AND_DISABLE_ZLIB = 16;
+
+namespace GZIP {
+constexpr int AUTO = ZLIB::AUTO + ADD_TO_ENABLE_GZIP_AND_DISABLE_ZLIB;
+constexpr int _256B = ZLIB::_256B + ADD_TO_ENABLE_GZIP_AND_DISABLE_ZLIB;
+constexpr int MIN = _256B;
+constexpr int _512B = ZLIB::_512B + ADD_TO_ENABLE_GZIP_AND_DISABLE_ZLIB;
+constexpr int _1KiB = ZLIB::_1KiB + ADD_TO_ENABLE_GZIP_AND_DISABLE_ZLIB;
+constexpr int _2KiB = ZLIB::_2KiB + ADD_TO_ENABLE_GZIP_AND_DISABLE_ZLIB;
+constexpr int _4KiB = ZLIB::_4KiB + ADD_TO_ENABLE_GZIP_AND_DISABLE_ZLIB;
+constexpr int _8KiB = ZLIB::_8KiB + ADD_TO_ENABLE_GZIP_AND_DISABLE_ZLIB;
+constexpr int _16KiB = ZLIB::_16KiB + ADD_TO_ENABLE_GZIP_AND_DISABLE_ZLIB;
+constexpr int _32KiB = ZLIB::_32KiB + ADD_TO_ENABLE_GZIP_AND_DISABLE_ZLIB;
+constexpr int MAX = _32KiB;
+}    // namespace GZIP
+
+constexpr int ADD_TO_ENABLE_GZIP = 32;
+
+namespace ZLIB_OR_GZIP {
+constexpr int AUTO = ZLIB::AUTO + ADD_TO_ENABLE_GZIP;
+constexpr int _256B = ZLIB::_256B + ADD_TO_ENABLE_GZIP;
+constexpr int MIN = _256B;
+constexpr int _512B = ZLIB::_512B + ADD_TO_ENABLE_GZIP;
+constexpr int _1KiB = ZLIB::_1KiB + ADD_TO_ENABLE_GZIP;
+constexpr int _2KiB = ZLIB::_2KiB + ADD_TO_ENABLE_GZIP;
+constexpr int _4KiB = ZLIB::_4KiB + ADD_TO_ENABLE_GZIP;
+constexpr int _8KiB = ZLIB::_8KiB + ADD_TO_ENABLE_GZIP;
+constexpr int _16KiB = ZLIB::_16KiB + ADD_TO_ENABLE_GZIP;
+constexpr int _32KiB = ZLIB::_32KiB + ADD_TO_ENABLE_GZIP;
+constexpr int MAX = _32KiB;
+}    // namespace ZLIB_OR_GZIP
+}    // namespace WindowBits
+
 class z_stream_wrapper : public z_stream {
   public:
     z_stream_wrapper(bool _is_input, int _level, int _window_bits) : is_input(_is_input) {
@@ -278,9 +352,10 @@ class z_stream_wrapper : public z_stream {
         if (is_input) {
             this->avail_in = 0;
             this->next_in = nullptr;    // Z_NULL
-            ret = inflateInit2(this, _window_bits ? _window_bits : 15 + 32);
+            ret = inflateInit2(this, _window_bits ? _window_bits : WindowBits::ZLIB_OR_GZIP::MAX);
         } else {
-            ret = deflateInit2(this, _level, Z_DEFLATED, _window_bits ? _window_bits : 15 + 16, 8, Z_DEFAULT_STRATEGY);
+            ret = deflateInit2(this, _level, Z_DEFLATED, _window_bits ? _window_bits : WindowBits::GZIP::MAX, 8,
+                               Z_DEFAULT_STRATEGY);
         }
         if (ret != Z_OK)
             throw Exception(this, ret);
@@ -329,6 +404,65 @@ class istreambuf : public std::streambuf {
         return static_cast<long int>(zstrm_p->total_out - static_cast<uLong>(in_avail()));
     }
 
+    struct ZlibHeader {
+        // Based on RFC 1950 (https://datatracker.ietf.org/doc/html/rfc1950#section-2.2)
+        // See also:
+        // http://stackoverflow.com/questions/9050260/what-does-a-zlib-header-look-like
+
+        // 0 to 7, log2 of the windowSize in bytes
+        uint8_t cminfo;
+        // always 8, the compression method
+        uint8_t cm;
+        // 0 to 3, the compression level, higher is more compressed
+        uint8_t flevel;
+        // usually 0, true if a preset dictionary is provided after the header
+        bool fdict;
+        // 0 to 31, checksum: ((cminfo * 16 + cm) * 256 + flevel * 32 + fdict * 16 + fcheck) % 31 = 0
+        uint8_t fcheck;
+
+      private:
+        uint16_t total;
+
+      public:
+        ZlibHeader(const uint8_t cmf, const uint8_t flg) {
+            // the top 4 bits
+            cminfo = cmf >> 4;
+            // the bottom 4 bits
+            cm = cmf & 0xf;
+
+            // the top 2 bits
+            flevel = flg >> 6;
+            // the 3rd top bit
+            fdict = flg & 0x20;
+            // the bottom 5 bits
+            fcheck = flg & 0x1f;
+
+            // reinterpret as integer in MSB order
+            total = cmf * 256 + flg;
+        }
+
+        [[nodiscard]] bool isValid() const noexcept {
+            return cm == 8 && total % 31 == 0;
+        }
+    };
+
+    static bool is_compressed(const char *const buffer, const char *const end) {
+        // Buffer too short
+        if (buffer + 2 > end)
+            return false;
+
+        const auto b0 = static_cast<uint8_t>(buffer[0]);
+        const auto b1 = static_cast<uint8_t>(buffer[1]);
+
+        // Check for Gzip magic numbers
+        // http://en.wikipedia.org/wiki/Gzip
+        if (b0 == 0x1F && b1 == 0x8B)
+            return true;
+        if (ZlibHeader(b0, b1).isValid())
+            return true;
+        return false;
+    }
+
     std::streambuf::int_type underflow() override {
         if (this->gptr() == this->egptr()) {
             // pointers for free region in output buffer
@@ -351,14 +485,7 @@ class istreambuf : public std::streambuf {
                 // auto detect if the stream contains text or deflate data
                 if (auto_detect && !auto_detect_run) {
                     auto_detect_run = true;
-                    unsigned char b0 = *reinterpret_cast<unsigned char *>(in_buff_start);
-                    unsigned char b1 = *reinterpret_cast<unsigned char *>(in_buff_start + 1);
-                    // Ref:
-                    // http://en.wikipedia.org/wiki/Gzip
-                    // http://stackoverflow.com/questions/9050260/what-does-a-zlib-header-look-like
-                    is_text = !(in_buff_start + 2 <= in_buff_end && ((b0 == 0x1F && b1 == 0x8B)       // gzip header
-                                                                     || (b0 == 0x78 && (b1 == 0x01    // zlib header
-                                                                                        || b1 == 0x9C || b1 == 0xDA))));
+                    is_text = !is_compressed(in_buff_start, in_buff_end);
                 }
                 if (is_text) {
                     // simply swap in_buff and out_buff, and adjust pointers
@@ -426,8 +553,10 @@ class ostreambuf : public std::streambuf {
     ostreambuf(std::streambuf *_sbuf_p, std::size_t _buff_size = default_buff_size, int _level = Z_DEFAULT_COMPRESSION,
                int _window_bits = 0)
         : sbuf_p(_sbuf_p), in_buff(), out_buff(), zstrm_p(new detail::z_stream_wrapper(false, _level, _window_bits)),
-          buff_size(_buff_size) {
+          buff_size(_buff_size), compress(_level != Z_NO_COMPRESSION) {
         assert(sbuf_p);
+        if (!compress)
+            return;
         in_buff = std::unique_ptr<char[]>(new char[buff_size]);
         out_buff = std::unique_ptr<char[]>(new char[buff_size]);
         setp(in_buff.get(), in_buff.get() + buff_size);
@@ -467,12 +596,18 @@ class ostreambuf : public std::streambuf {
         // close the ofstream with an explicit call to close(), and do not rely
         // on the implicit call in the destructor.
         //
-        if (!failed)
+        if (!failed && compress)
             try {
                 sync();
             } catch (...) {}
     }
     std::streambuf::int_type overflow(std::streambuf::int_type c = traits_type::eof()) override {
+        if (!compress) {
+            if (!traits_type::eq_int_type(c, traits_type::eof()))
+                return sbuf_p->sputc(char_type(c));
+            return traits_type::not_eof(c);
+        }
+
         zstrm_p->next_in = reinterpret_cast<decltype(zstrm_p->next_in)>(pbase());
         zstrm_p->avail_in = uint32_t(pptr() - pbase());
         while (zstrm_p->avail_in > 0) {
@@ -486,6 +621,9 @@ class ostreambuf : public std::streambuf {
         return traits_type::eq_int_type(c, traits_type::eof()) ? traits_type::eof() : sputc(char_type(c));
     }
     int sync() override {
+        if (!compress)
+            return sbuf_p->pubsync();
+
         // first, call overflow to clear in_buff
         overflow();
         if (!pptr())
@@ -506,6 +644,7 @@ class ostreambuf : public std::streambuf {
     std::unique_ptr<detail::z_stream_wrapper> zstrm_p;
     std::size_t buff_size;
     bool failed = false;
+    bool compress;
 
 };    // class ostreambuf
 
@@ -609,7 +748,7 @@ class ofstream : private detail::strict_fstream_holder<strict_fstream::ofstream>
               int level = Z_DEFAULT_COMPRESSION) {
         flush();
         _fs.open(filename, mode | std::ios_base::binary);
-        std::ostream::operator=(std::ostream(new ostreambuf(_fs.rdbuf(), default_buff_size, level)));
+        rdbuf(new ostreambuf(_fs.rdbuf(), default_buff_size, level));
     }
 #endif
     bool is_open() const {
