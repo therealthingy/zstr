@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.28)
 
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 
-project(zstr CXX)
+project(zstr VERSION 1.2.0 LANGUAGES CXX)
 
 set(CMAKE_BUILD_TYPE Debug)
 
